@@ -139,6 +139,8 @@ input:focus, select:focus, textarea:focus {
   flex-direction: column;
   gap: 24px;
   overflow-y: auto;
+  min-height: 0;
+  min-width: 0;
 }
 
 .editor-header {
@@ -216,6 +218,8 @@ input:focus, select:focus, textarea:focus {
   background: var(--bg-panel);
   display: flex;
   flex-direction: column;
+  min-height: 0;
+  min-width: 0;
 }
 
 .archive-header {

@@ -61,7 +61,9 @@ export async function GET() {
     );
   }
 
-  const keys = parseReadme(readmeText);
+  let keys = parseReadme(readmeText);
+  keys = await validateKeys(keys);
+  
   _cache = { keys, cachedAt: Date.now() };
 
   return NextResponse.json({
@@ -133,4 +135,40 @@ function parseReadme(readme: string): FreeKey[] {
 
   // Sort highest budget first — most likely to still have credit
   return keys.sort((a, b) => b.budget - a.budget);
+}
+
+// ── Active Key Validation ───────────────────────────────────────────────────
+// We send a tiny request to test if the key is rate-limited (429) or dead (401).
+// This guarantees the UI only shows models that are 100% working right now.
+
+async function validateKeys(keys: FreeKey[]): Promise<FreeKey[]> {
+  const validKeys: FreeKey[] = [];
+
+  const checks = keys.map(async (k) => {
+    try {
+      const res = await fetch("https://aiapiv2.pekpik.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${k.key}`,
+        },
+        body: JSON.stringify({
+          model: k.model,
+          messages: [{ role: "user", content: "test" }],
+          max_tokens: 1,
+        }),
+      });
+
+      if (res.ok) {
+        validKeys.push(k);
+      }
+    } catch (e) {
+      // Network errors, timeouts, etc -> assume key is dead
+    }
+  });
+
+  // Run all checks in parallel
+  await Promise.allSettled(checks);
+
+  return validKeys;
 }
