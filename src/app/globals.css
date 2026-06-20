@@ -372,3 +372,67 @@ label {
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 999px; }
+
+/* ============================================================
+   PROVIDER BADGE (topbar)
+   ============================================================ */
+.provider-badge {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--success);
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.25);
+  border-radius: var(--radius-sm);
+  padding: 3px 8px;
+  letter-spacing: 0.02em;
+}
+
+/* ============================================================
+   FREE KEY STATUS (settings modal)
+   ============================================================ */
+.free-key-status {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.free-key-loading {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.free-key-ok {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--success);
+}
+
+.free-key-err {
+  font-size: 13px;
+  color: var(--danger);
+}
+
+/* ============================================================
+   KEY META BADGE (variant card, below output)
+   ============================================================ */
+.key-meta-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 6px 14px;
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--surface2);
+  flex-shrink: 0;
+}
+
+.key-meta-retried {
+  color: var(--danger);
+  font-weight: 600;
+}

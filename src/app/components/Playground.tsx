@@ -20,6 +20,7 @@ type Variant = {
   rawPrompt: string;
   output: string;
   status: "idle" | "loading" | "success" | "error";
+  keyMeta?: { model: string; budget: number; expires: string; rateLimit: string; attemptsUsed: number } | null;
 };
 
 // ── Helpers ──────────────────────────────────────────────────
@@ -61,13 +62,29 @@ function newVariant(name?: string): Variant {
 // ── Settings Modal ────────────────────────────────────────────
 function SettingsModal({ onClose }: { onClose: () => void }) {
   const [apiKey, setApiKey] = useState("");
-  const [provider, setProvider] = useState("groq");
+  const [provider, setProvider] = useState("free");
   const [saved, setSaved] = useState(false);
+  const [freeKeyCount, setFreeKeyCount] = useState<number | null>(null);
+  const [freeKeyError, setFreeKeyError] = useState("");
 
   useEffect(() => {
     setApiKey(localStorage.getItem("pp_key") ?? "");
-    setProvider(localStorage.getItem("pp_provider") ?? "groq");
+    setProvider(localStorage.getItem("pp_provider") ?? "free");
   }, []);
+
+  // Fetch free key count whenever the modal opens or provider switches to free
+  useEffect(() => {
+    if (provider !== "free") return;
+    setFreeKeyCount(null);
+    setFreeKeyError("");
+    fetch("/api/free-keys")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.error) setFreeKeyError(d.error);
+        else setFreeKeyCount(d.keys?.length ?? 0);
+      })
+      .catch(() => setFreeKeyError("Could not reach key list"));
+  }, [provider]);
 
   function save() {
     localStorage.setItem("pp_key", apiKey.trim());
@@ -84,24 +101,46 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
         <div className="field-group">
           <label>Provider</label>
           <select value={provider} onChange={(e) => setProvider(e.target.value)}>
+            <option value="free">🆓 Community Keys — zero setup, auto-refreshed</option>
             <option value="groq">Groq — free at console.groq.com</option>
             <option value="openrouter">OpenRouter — free tier at openrouter.ai</option>
           </select>
         </div>
 
-        <div className="field-group">
-          <label>API Key</label>
-          <input
-            type="password"
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            placeholder={provider === "groq" ? "gsk_..." : "sk-or-..."}
-            style={{ fontFamily: "monospace" }}
-          />
-          <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>
-            Stored in your browser only — never leaves your machine except to call the AI.
-          </p>
-        </div>
+        {provider === "free" ? (
+          <div className="free-key-status">
+            {freeKeyCount === null && !freeKeyError && (
+              <span className="free-key-loading">⟳ Checking available keys…</span>
+            )}
+            {freeKeyCount !== null && (
+              <span className="free-key-ok">✓ {freeKeyCount} community key{freeKeyCount !== 1 ? "s" : ""} available right now</span>
+            )}
+            {freeKeyError && (
+              <span className="free-key-err">⚠ {freeKeyError}</span>
+            )}
+            <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 6 }}>
+              Keys are sourced from{" "}
+              <a href="https://github.com/alistaitsacle/free-llm-api-keys" target="_blank" rel="noreferrer" style={{ color: "var(--primary)" }}>
+                alistaitsacle/free-llm-api-keys
+              </a>
+              . They expire in 24–48h and budgets are shared — if one fails the app retries automatically.
+            </p>
+          </div>
+        ) : (
+          <div className="field-group">
+            <label>API Key</label>
+            <input
+              type="password"
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              placeholder={provider === "groq" ? "gsk_..." : "sk-or-..."}
+              style={{ fontFamily: "monospace" }}
+            />
+            <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>
+              Stored in your browser only — never leaves your machine except to call the AI.
+            </p>
+          </div>
+        )}
 
         <div className="modal-actions">
           <button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button>
@@ -229,6 +268,22 @@ function VariantCard({
         {variant.status === "loading" && "Thinking…"}
         {(variant.status === "success" || variant.status === "error") && variant.output}
       </div>
+
+      {/* Key meta badge — only shown when a community key was used */}
+      {variant.keyMeta && variant.status === "success" && (
+        <div className="key-meta-badge">
+          <span>⚡ {variant.keyMeta.model}</span>
+          <span>·</span>
+          <span>${variant.keyMeta.budget} budget</span>
+          <span>·</span>
+          <span>expires {variant.keyMeta.expires}</span>
+          <span>·</span>
+          <span>{variant.keyMeta.rateLimit}</span>
+          {variant.keyMeta.attemptsUsed > 1 && (
+            <><span>·</span><span className="key-meta-retried">retried {variant.keyMeta.attemptsUsed - 1}×</span></>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -255,6 +310,12 @@ export default function Playground() {
   ]);
   const [userInput, setUserInput] = useState("");
   const [showSettings, setShowSettings] = useState(false);
+  const [activeProvider, setActiveProvider] = useState<string>("free");
+
+  // Keep activeProvider in sync with localStorage so the topbar reflects it
+  useEffect(() => {
+    setActiveProvider(localStorage.getItem("pp_provider") ?? "free");
+  }, [showSettings]); // re-read whenever settings modal closes
 
   function updateVariant(updated: Variant) {
     setVariants((prev) => prev.map((v) => (v.id === updated.id ? updated : v)));
@@ -276,20 +337,11 @@ export default function Playground() {
       return;
     }
 
-    updateVariant({ ...variant, status: "loading", output: "" });
+    updateVariant({ ...variant, status: "loading", output: "", keyMeta: null });
 
     try {
       const apiKey = localStorage.getItem("pp_key") ?? "";
-      const provider = localStorage.getItem("pp_provider") ?? "groq";
-
-      if (!apiKey) {
-        await new Promise((r) => setTimeout(r, 900));
-        const mock = prompt.toLowerCase().includes("json")
-          ? '{\n  "company": "Acme Corp",\n  "role": "Engineer",\n  "salary": null,\n  "location": "Remote"\n}'
-          : `[No API key set]\n\nYour prompt (${prompt.length} chars) was received.\nClick ⚙ Settings and add a free Groq key to get real responses.`;
-        updateVariant({ ...variant, status: "success", output: mock });
-        return;
-      }
+      const provider = localStorage.getItem("pp_provider") ?? "free";
 
       const res = await fetch("/api/completion", {
         method: "POST",
@@ -299,9 +351,14 @@ export default function Playground() {
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "API request failed");
-      updateVariant({ ...variant, status: "success", output: data.output });
+      updateVariant({
+        ...variant,
+        status: "success",
+        output: data.output,
+        keyMeta: data.keyMeta ?? null,
+      });
     } catch (err: any) {
-      updateVariant({ ...variant, status: "error", output: err.message });
+      updateVariant({ ...variant, status: "error", output: err.message, keyMeta: null });
     }
   }
 
@@ -315,6 +372,9 @@ export default function Playground() {
       <header className="topbar">
         <span className="topbar-title">Prompt Playground</span>
         <div className="topbar-actions">
+          {activeProvider === "free" && (
+            <span className="provider-badge">🆓 community keys</span>
+          )}
           <button type="button" className="btn btn-ghost" onClick={() => setShowSettings(true)}>
             ⚙ Settings
           </button>
