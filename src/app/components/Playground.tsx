@@ -42,8 +42,8 @@ const MODES: DropdownItem[] = [
   { id: "CODE", label: "CODE" }
 ];
 
-const PROVIDERS: DropdownItem[] = [
-  { id: "free", label: "FREE COMMUNITY", meta: "GITHUB POOL" },
+const DEFAULT_PROVIDERS: DropdownItem[] = [
+  { id: "free", label: "FREE COMMUNITY", meta: "POOL" },
   { id: "pollinations", label: "POLLINATIONS IMAGE", meta: "FREE" },
   { id: "groq", label: "GROQ", meta: "API" },
   { id: "openrouter", label: "OPENROUTER", meta: "API" }
@@ -75,6 +75,7 @@ export default function Playground() {
   const [currentView, setCurrentView] = useState<"playground" | "presets" | "compare">("playground");
   
   // Left: Settings & Meta
+  const [providers, setProviders] = useState(DEFAULT_PROVIDERS);
   const [provider, setProvider] = useState("free");
   const [apiKey, setApiKey] = useState("");
   const [freeKeyCount, setFreeKeyCount] = useState<number | null>(null);
@@ -105,8 +106,26 @@ export default function Playground() {
   // ── Initialization & Persistence ──────────────────────────────────
   useEffect(() => {
     setIsClient(true);
-    setProvider(localStorage.getItem("pp_provider") ?? "free");
+    let initialProvider = localStorage.getItem("pp_provider") ?? "free";
     setApiKey(localStorage.getItem("pp_key") ?? "");
+    
+    // Background check for free keys immediately on load
+    getFreeKeys().then((d) => {
+      if (d.keys && d.keys.length === 0) {
+        // Remove 'free' from selectable options
+        setProviders(prev => prev.filter(p => p.id !== "free"));
+        // If current provider is free, bump them to the next free option
+        if (initialProvider === "free" || provider === "free") {
+          initialProvider = "pollinations";
+          setProvider("pollinations");
+        }
+      } else if (d.keys && d.keys.length > 0) {
+        setFreeKeyCount(d.keys.length);
+      }
+    });
+
+    setProvider(initialProvider);
+
     const savedArchive = localStorage.getItem("pp_archive");
     if (savedArchive) {
       try {
@@ -357,7 +376,7 @@ export default function Playground() {
             <Dropdown 
               title="SELECT_PROVIDER" 
               value={provider} 
-              items={PROVIDERS} 
+              items={providers} 
               onChange={setProvider} 
             />
           </div>
