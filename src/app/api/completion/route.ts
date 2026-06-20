@@ -6,7 +6,7 @@ const MAX_KEY_ATTEMPTS = 8;
 
 export async function POST(req: Request) {
   try {
-    const { prompt, apiKey, provider } = await req.json();
+    const { prompt, apiKey, provider, forceModel } = await req.json();
 
     if (!prompt) {
       return NextResponse.json({ error: "Missing prompt" }, { status: 400 });
@@ -14,7 +14,7 @@ export async function POST(req: Request) {
 
     // ── Free community keys (no user API key needed) ────────────────────────
     if (provider === "free") {
-      return handleFreeProvider(prompt, req);
+      return handleFreeProvider(prompt, forceModel);
     }
 
     // ── User-supplied key providers ─────────────────────────────────────────
@@ -69,7 +69,7 @@ export async function POST(req: Request) {
 
 async function handleFreeProvider(
   prompt: string,
-  _req: Request
+  forceModel?: string
 ): Promise<NextResponse> {
   // Fetch key list from our own caching route
   let keys: FreeKey[] = [];
@@ -105,6 +105,17 @@ async function handleFreeProvider(
       },
       { status: 503 }
     );
+  }
+
+  // If forceModel is provided, filter keys down to just that model
+  if (forceModel) {
+    keys = keys.filter((k) => k.model === forceModel);
+    if (keys.length === 0) {
+      return NextResponse.json(
+        { error: `No active community keys found for model: ${forceModel}` },
+        { status: 404 }
+      );
+    }
   }
 
   // Try up to MAX_KEY_ATTEMPTS keys, rotating on 401/429

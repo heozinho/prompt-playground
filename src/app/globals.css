@@ -295,3 +295,11 @@ input:focus, select:focus, textarea:focus {
 ::-webkit-scrollbar-track { background: transparent; border-left: 1px solid var(--border); }
 ::-webkit-scrollbar-thumb { background: #ccc; }
 ::-webkit-scrollbar-thumb:hover { background: #999; }
+
+/* Preset Grid */
+.preset-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+
