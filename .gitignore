@@ -39,3 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# project meta / agent files — not for the repo
+AGENTS.md
+CLAUDE.md
+RULES.md
+README.md.bak
