@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Dropdown, { DropdownItem } from "./Dropdown";
+import { getFreeKeys, executeCompletion } from "@/lib/api";
 
 type Artifact = {
   id: string;
@@ -12,7 +13,7 @@ type Artifact = {
   outputType?: "text" | "image";
   status: "running" | "success" | "error";
   modelUsed: string;
-  keyMeta?: { budget: number; expires: string; rateLimit: string; attemptsUsed: number } | null;
+  keyMeta?: { budget: number; attemptsUsed: number } | null;
   runtime?: number;
 };
 
@@ -145,24 +146,21 @@ export default function Playground() {
     if (provider !== "free") return;
     setFreeKeyCount(null);
     setFreeKeyError("");
-    fetch("/api/free-keys")
-      .then((r) => r.json())
-      .then((d) => {
-        if (d.error) setFreeKeyError(d.error);
-        else {
-          setFreeKeyCount(d.keys?.length ?? 0);
-          if (d.keys) {
-            const unique = Array.from(new Set(d.keys.map((k: any) => k.model))) as string[];
-            const modelItems = unique.map(m => ({ id: m, label: m, meta: "FREE" }));
-            setAvailableFreeModels(modelItems);
-            if (modelItems.length >= 2) {
-              setCompareModel1(modelItems[0].id);
-              setCompareModel2(modelItems[1].id);
-            }
+    getFreeKeys().then((d) => {
+      if (d.error) setFreeKeyError(d.error);
+      else {
+        setFreeKeyCount(d.keys.length);
+        if (d.keys.length > 0) {
+          const unique = Array.from(new Set(d.keys.map((k: any) => k.model))) as string[];
+          const modelItems = unique.map(m => ({ id: m, label: m, meta: "FREE" }));
+          setAvailableFreeModels(modelItems);
+          if (modelItems.length >= 2) {
+            setCompareModel1(modelItems[0].id);
+            setCompareModel2(modelItems[1].id);
           }
         }
-      })
-      .catch(() => setFreeKeyError("Could not reach key list"));
+      }
+    }).catch(() => setFreeKeyError("Could not reach key list"));
   }, [provider]);
 
   // ── UI Actions ─────────────────────────────────────────────────────
@@ -253,23 +251,18 @@ export default function Playground() {
       }
 
       const fullPrompt = sys.trim() ? `System: ${sys}\n\n${combinedPrompt}` : combinedPrompt;
-      const res = await fetch("/api/completion", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: fullPrompt, apiKey, provider, forceModel: forcedModel }),
-      });
+      const res = await executeCompletion(fullPrompt, provider, apiKey, forcedModel);
 
-      const data = await res.json();
+      if (res.error) throw new Error(res.error);
+
       const runtime = Number(((Date.now() - startTime) / 1000).toFixed(1));
-
-      if (!res.ok) throw new Error(data.error ?? "API request failed");
 
       return {
         ...initialArtifact,
         status: "success",
-        output: data.output,
-        modelUsed: data.model || initialArtifact.modelUsed,
-        keyMeta: data.keyMeta ?? null,
+        output: res.output,
+        modelUsed: res.model || initialArtifact.modelUsed,
+        keyMeta: res.keyMeta ?? null,
         runtime,
       };
     } catch (err: any) {
