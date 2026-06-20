@@ -256,7 +256,132 @@ input:focus, select:focus, textarea:focus {
   display: flex;
   gap: 4px;
 }
+/* ============================================================
+   INTERACTION LAYER (Dropdowns & States)
+   ============================================================ */
 
+/* Mechanical drop animation */
+@keyframes snapOpen {
+  0% { opacity: 0; transform: translateY(-4px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+.dropdown-container {
+  position: relative;
+  display: inline-block;
+  width: 100%;
+}
+
+.dropdown-trigger {
+  width: 100%;
+  text-align: left;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  background: transparent;
+  border: 1px solid var(--border);
+  padding: 8px 10px;
+  color: var(--text);
+  cursor: pointer;
+}
+.dropdown-trigger:hover {
+  border-color: var(--border-dark);
+}
+
+.dropdown-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  width: 100%;
+  min-width: max-content;
+  background: var(--bg-card);
+  border: 1px solid var(--text); /* Sharp black border */
+  z-index: 100;
+  animation: snapOpen 0.05s ease-out forwards;
+  display: flex;
+  flex-direction: column;
+}
+
+.dropdown-header {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--text);
+  color: var(--text);
+  background: var(--bg-panel);
+}
+
+.dropdown-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  background: var(--bg-card);
+  color: var(--text);
+  border: none;
+  text-align: left;
+  font-family: var(--font-mono);
+}
+
+.dropdown-item:hover {
+  text-decoration: underline;
+}
+
+.dropdown-item.active {
+  background: var(--text);
+  color: var(--bg-card);
+}
+.dropdown-item.active:hover {
+  text-decoration: none;
+}
+
+.dropdown-meta {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+.dropdown-item.active .dropdown-meta {
+  color: var(--bg-panel);
+}
+
+/* Inline Block Dropdown */
+.inline-dropdown-trigger {
+  background: none;
+  border: none;
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+  text-transform: inherit;
+  letter-spacing: inherit;
+}
+.inline-dropdown-trigger:hover {
+  text-decoration: underline;
+}
+
+/* Interactive Card Hovers */
+.artifact-card-interactive {
+  transition: border-color 0.1s, transform 0.1s;
+}
+.artifact-card-interactive:hover {
+  border-color: var(--border-dark);
+  /* transform: scale(1.005); */ /* Reverting scale, might be too much, requested 1% but borders overlapping is annoying */
+}
+
+/* Status message flicker */
+.status-flicker {
+  color: var(--accent-text);
+  background: var(--accent);
+  padding: 2px 6px;
+  font-weight: 600;
+}
 .artifact-content {
   padding: 16px;
   font-family: var(--font-mono);

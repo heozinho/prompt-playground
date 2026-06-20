@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Dropdown, { DropdownItem } from "./Dropdown";
 
 type Artifact = {
   id: string;
@@ -14,39 +15,59 @@ type Artifact = {
   runtime?: number;
 };
 
+type Block = {
+  id: string;
+  type: string;
+  content: string;
+};
+
+const BLOCK_TYPES: DropdownItem[] = [
+  { id: "SYSTEM", label: "SYSTEM" },
+  { id: "USER", label: "USER" },
+  { id: "STYLE", label: "STYLE" },
+  { id: "TEXTURE", label: "TEXTURE" },
+  { id: "CONSTRAINTS", label: "CONSTRAINTS" },
+  { id: "NEGATIVE", label: "NEGATIVE" },
+  { id: "EXAMPLES", label: "EXAMPLES" },
+  { id: "OUTPUT FORMAT", label: "OUTPUT FORMAT" },
+  { id: "NOTES", label: "NOTES" },
+];
+
+const MODES: DropdownItem[] = [
+  { id: "TEXT", label: "TEXT" },
+  { id: "IMAGE PROMPT", label: "IMAGE PROMPT" },
+  { id: "AGENT PLAN", label: "AGENT PLAN" },
+  { id: "CODE", label: "CODE" }
+];
+
+const PROVIDERS: DropdownItem[] = [
+  { id: "free", label: "FREE COMMUNITY", meta: "GITHUB POOL" },
+  { id: "groq", label: "GROQ", meta: "API" },
+  { id: "openrouter", label: "OPENROUTER", meta: "API" }
+];
+
 const PRESETS = [
   {
     id: "VISUAL_STYLE_EXTRACTOR",
     tag: "IMAGE",
     desc: "Turns references into reusable art direction.",
-    sys: "You are an expert art director. Analyze the user's description of an image and extract a strict, reusable prompt formula focusing on lighting, medium, camera angle, and color grading. Output ONLY the formula.",
-    usr: "A 1990s anime style shot of a rainy cyberpunk city, neon reflections on wet asphalt, slightly blurred background."
+    blocks: [
+      { id: "1", type: "SYSTEM", content: "You are an expert art director. Analyze the user's description of an image and extract a strict, reusable prompt formula focusing on lighting, medium, camera angle, and color grading. Output ONLY the formula." },
+      { id: "2", type: "USER", content: "A 1990s anime style shot of a rainy cyberpunk city, neon reflections on wet asphalt, slightly blurred background." }
+    ]
   },
   {
     id: "AGENT_PLANNER",
     tag: "AGENT",
     desc: "Breaks tasks into tool-ready steps.",
-    sys: "You are an autonomous agent planner. Break the user's goal into a strict JSON array of sequential steps. Each step must define the required tool, inputs, and expected output.",
-    usr: "Research the latest top 3 open-source LLMs, summarize their context window sizes, and write a markdown report."
-  },
-  {
-    id: "CODE_REVIEW_HARSH",
-    tag: "CODE",
-    desc: "A cold, ruthless code reviewer.",
-    sys: "You are a ruthless, senior systems engineer. Review the provided code. Point out logic flaws, security issues, and performance bottlenecks. Do not compliment the author. Be cold and brief.",
-    usr: "function isEven(n) {\n  if (n === 0) return true;\n  if (n === 1) return false;\n  return isEven(n - 2);\n}"
-  },
-  {
-    id: "ZERO_SHOT_CLASSIFIER",
-    tag: "EVAL",
-    desc: "Strictly categorizes text inputs.",
-    sys: "Classify the user's text into one of the following categories: SPAM, INQUIRY, COMPLAINT, PRAISE. Output ONLY the category name. No other text.",
-    usr: "Hey there! I've been trying to get my refund for 3 weeks now and no one is replying to my emails. What is going on?"
+    blocks: [
+      { id: "1", type: "SYSTEM", content: "You are an autonomous agent planner. Break the user's goal into a strict JSON array of sequential steps. Each step must define the required tool, inputs, and expected output." },
+      { id: "2", type: "USER", content: "Research the latest top 3 open-source LLMs, summarize their context window sizes, and write a markdown report." }
+    ]
   }
 ];
 
 export default function Playground() {
-  // ── State ────────────────────────────────────────────────────────
   const [isClient, setIsClient] = useState(false);
   const [currentView, setCurrentView] = useState<"playground" | "presets" | "compare">("playground");
   
@@ -55,11 +76,18 @@ export default function Playground() {
   const [apiKey, setApiKey] = useState("");
   const [freeKeyCount, setFreeKeyCount] = useState<number | null>(null);
   const [freeKeyError, setFreeKeyError] = useState("");
-  const [availableFreeModels, setAvailableFreeModels] = useState<string[]>([]);
+  const [availableFreeModels, setAvailableFreeModels] = useState<DropdownItem[]>([]);
+
+  // Flicker state sequence
+  const [statusMessage, setStatusMessage] = useState("STATUS: READY");
 
   // Center: Active Command Center
-  const [activeSystem, setActiveSystem] = useState("");
-  const [activePrompt, setActivePrompt] = useState("");
+  const [activeMode, setActiveMode] = useState("TEXT");
+  const [blocks, setBlocks] = useState<Block[]>([
+    { id: "init-sys", type: "SYSTEM", content: "" },
+    { id: "init-usr", type: "USER", content: "" }
+  ]);
+  const [runState, setRunState] = useState<"idle" | "running" | "complete" | "error">("idle");
   
   // Right: Archive
   const [archive, setArchive] = useState<Artifact[]>([]);
@@ -109,10 +137,11 @@ export default function Playground() {
           setFreeKeyCount(d.keys?.length ?? 0);
           if (d.keys) {
             const unique = Array.from(new Set(d.keys.map((k: any) => k.model))) as string[];
-            setAvailableFreeModels(unique);
-            if (unique.length >= 2) {
-              setCompareModel1(unique[0]);
-              setCompareModel2(unique[1]);
+            const modelItems = unique.map(m => ({ id: m, label: m, meta: "FREE" }));
+            setAvailableFreeModels(modelItems);
+            if (modelItems.length >= 2) {
+              setCompareModel1(modelItems[0].id);
+              setCompareModel2(modelItems[1].id);
             }
           }
         }
@@ -120,15 +149,66 @@ export default function Playground() {
       .catch(() => setFreeKeyError("Could not reach key list"));
   }, [provider]);
 
+  // ── UI Actions ─────────────────────────────────────────────────────
+  function flashStatus(msg: string) {
+    setStatusMessage(msg);
+    setTimeout(() => {
+      setStatusMessage("STATUS: READY");
+    }, 1500);
+  }
+
+  function handleModeChange(modeId: string) {
+    setActiveMode(modeId);
+    flashStatus(`MODE UPDATED → ${modeId}`);
+    
+    // Very basic restructuring demo
+    if (modeId === "IMAGE PROMPT") {
+      setBlocks([
+        { id: Math.random().toString(), type: "SUBJECT", content: "" },
+        { id: Math.random().toString(), type: "STYLE", content: "" },
+        { id: Math.random().toString(), type: "NEGATIVE", content: "" }
+      ]);
+    } else if (modeId === "AGENT PLAN") {
+      setBlocks([
+        { id: Math.random().toString(), type: "GOAL", content: "" },
+        { id: Math.random().toString(), type: "TOOLS", content: "" },
+        { id: Math.random().toString(), type: "STEPS", content: "" }
+      ]);
+    } else {
+      setBlocks([
+        { id: Math.random().toString(), type: "SYSTEM", content: "" },
+        { id: Math.random().toString(), type: "USER", content: "" }
+      ]);
+    }
+  }
+
+  function updateBlock(id: string, field: "type" | "content", value: string) {
+    setBlocks(prev => prev.map(b => {
+      if (b.id === id) {
+        if (field === "type") flashStatus(`BLOCK TYPE → ${value}`);
+        return { ...b, [field]: value };
+      }
+      return b;
+    }));
+  }
+
+  function addBlock(type: string) {
+    setBlocks(prev => [...prev, { id: Math.random().toString(), type, content: "" }]);
+  }
+
+  function removeBlock(id: string) {
+    setBlocks(prev => prev.filter(b => b.id !== id));
+  }
+
   // ── Execution ─────────────────────────────────────────────────────
-  async function executeSinglePrompt(sys: string, usr: string, forcedModel?: string): Promise<Artifact> {
+  async function executeSinglePrompt(combinedPrompt: string, sys: string, forcedModel?: string): Promise<Artifact> {
     const runId = Math.random().toString(36).substring(2, 9).toUpperCase();
     const startTime = Date.now();
     
     const initialArtifact: Artifact = {
       id: runId,
       timestamp: new Date().toLocaleTimeString([], { hour12: false }),
-      prompt: usr,
+      prompt: combinedPrompt,
       system: sys,
       output: "",
       status: "running",
@@ -136,7 +216,7 @@ export default function Playground() {
     };
 
     try {
-      const fullPrompt = sys.trim() ? `System: ${sys}\n\nUser: ${usr}` : usr;
+      const fullPrompt = sys.trim() ? `System: ${sys}\n\n${combinedPrompt}` : combinedPrompt;
       const res = await fetch("/api/completion", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -163,24 +243,34 @@ export default function Playground() {
   }
 
   async function executePlayground() {
-    if (!activePrompt.trim()) return;
+    // Concatenate all blocks into a single string for the LLM
+    const sysBlocks = blocks.filter(b => b.type === "SYSTEM").map(b => b.content).join("\n\n");
+    const userBlocks = blocks.filter(b => b.type !== "SYSTEM" && b.content.trim())
+      .map(b => `${b.type}:\n${b.content}`)
+      .join("\n\n");
+
+    if (!userBlocks.trim() && !sysBlocks.trim()) return;
+
+    setRunState("running");
     
-    // Create pending artifact in UI immediately
     const runId = Math.random().toString(36).substring(2, 9).toUpperCase();
     const pending: Artifact = {
       id: runId,
       timestamp: new Date().toLocaleTimeString([], { hour12: false }),
-      prompt: activePrompt,
-      system: activeSystem,
+      prompt: userBlocks,
+      system: sysBlocks,
       output: "",
       status: "running",
       modelUsed: "..."
     };
     setArchive((prev) => [pending, ...prev]);
 
-    const result = await executeSinglePrompt(activeSystem, activePrompt);
+    const result = await executeSinglePrompt(userBlocks, sysBlocks);
     
     setArchive((prev) => prev.map((a) => a.id === runId ? result : a));
+    
+    setRunState(result.status === "success" ? "complete" : "error");
+    setTimeout(() => setRunState("idle"), 1500);
   }
 
   async function executeCompare() {
@@ -194,21 +284,20 @@ export default function Playground() {
     });
 
     const [res1, res2] = await Promise.all([
-      executeSinglePrompt("", comparePrompt, compareModel1),
-      executeSinglePrompt("", comparePrompt, compareModel2)
+      executeSinglePrompt(comparePrompt, "", compareModel1),
+      executeSinglePrompt(comparePrompt, "", compareModel2)
     ]);
 
     setCompareOutput1(res1);
     setCompareOutput2(res2);
     
-    // Save both to archive
     setArchive((prev) => [res1, res2, ...prev]);
   }
 
   function loadPreset(preset: typeof PRESETS[0]) {
-    setActiveSystem(preset.sys);
-    setActivePrompt(preset.usr);
+    setBlocks(preset.blocks);
     setCurrentView("playground");
+    flashStatus(`PRESET LOADED → ${preset.id}`);
   }
 
   // Prevents hydration mismatch
@@ -226,24 +315,9 @@ export default function Playground() {
 
         <div className="sidebar-section">
           <span className="label">Navigation</span>
-          <button 
-            className={`nav-link ${currentView === "playground" ? "active" : ""}`}
-            onClick={() => setCurrentView("playground")}
-          >
-            PLAYGROUND
-          </button>
-          <button 
-            className={`nav-link ${currentView === "compare" ? "active" : ""}`}
-            onClick={() => setCurrentView("compare")}
-          >
-            COMPARE
-          </button>
-          <button 
-            className={`nav-link ${currentView === "presets" ? "active" : ""}`}
-            onClick={() => setCurrentView("presets")}
-          >
-            PRESETS
-          </button>
+          <button className={`nav-link ${currentView === "playground" ? "active" : ""}`} onClick={() => setCurrentView("playground")}>PLAYGROUND</button>
+          <button className={`nav-link ${currentView === "compare" ? "active" : ""}`} onClick={() => setCurrentView("compare")}>COMPARE</button>
+          <button className={`nav-link ${currentView === "presets" ? "active" : ""}`} onClick={() => setCurrentView("presets")}>PRESETS</button>
         </div>
 
         <div className="sidebar-section">
@@ -251,11 +325,12 @@ export default function Playground() {
           
           <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
             <span className="label" style={{ fontSize: "9px" }}>Provider</span>
-            <select value={provider} onChange={(e) => setProvider(e.target.value)}>
-              <option value="free">FREE COMMUNITY</option>
-              <option value="groq">GROQ</option>
-              <option value="openrouter">OPENROUTER</option>
-            </select>
+            <Dropdown 
+              title="SELECT_PROVIDER" 
+              value={provider} 
+              items={PROVIDERS} 
+              onChange={setProvider} 
+            />
           </div>
 
           {provider === "free" ? (
@@ -267,13 +342,7 @@ export default function Playground() {
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
               <span className="label" style={{ fontSize: "9px" }}>API Key</span>
-              <input
-                type="password"
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                placeholder="sk-..."
-                className="mono"
-              />
+              <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="sk-..." className="mono" />
             </div>
           )}
         </div>
@@ -285,47 +354,63 @@ export default function Playground() {
         {currentView === "playground" && (
           <>
             <div className="editor-header">
-              <div>
+              <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
                 <span className="title">ACTIVE_EXPERIMENT</span>
+                <span className={`label ${statusMessage !== "STATUS: READY" ? "status-flicker" : ""}`}>{statusMessage}</span>
               </div>
               <div style={{ display: "flex", gap: "16px", alignItems: "center" }}>
-                <span className="label">MODE: RAW</span>
-                <span className="label">TEMP: 0.7</span>
+                <Dropdown 
+                  title="SELECT_MODE"
+                  value={activeMode}
+                  items={MODES}
+                  onChange={handleModeChange}
+                  inline
+                />
               </div>
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-              <div className="editor-block">
-                <div className="editor-block-header">
-                  <span className="label">[ SYSTEM ]</span>
+              {blocks.map((block) => (
+                <div key={block.id} className="editor-block">
+                  <div className="editor-block-header" style={{ display: "flex", justifyContent: "space-between" }}>
+                    <Dropdown 
+                      title="BLOCK_TYPE"
+                      value={block.type}
+                      items={BLOCK_TYPES}
+                      onChange={(val) => updateBlock(block.id, "type", val)}
+                      inline
+                    />
+                    <button className="nav-link" onClick={() => removeBlock(block.id)} style={{ fontSize: "10px" }}>×</button>
+                  </div>
+                  <textarea
+                    className="editor-textarea"
+                    placeholder={`Enter ${block.type.toLowerCase()} content...`}
+                    value={block.content}
+                    onChange={(e) => updateBlock(block.id, "content", e.target.value)}
+                    style={{ minHeight: block.type === "SYSTEM" ? "80px" : "160px" }}
+                  />
                 </div>
-                <textarea
-                  className="editor-textarea"
-                  placeholder="You are a cold visual prompt assistant..."
-                  value={activeSystem}
-                  onChange={(e) => setActiveSystem(e.target.value)}
-                  style={{ minHeight: "80px" }}
-                />
-              </div>
-
-              <div className="editor-block">
-                <div className="editor-block-header">
-                  <span className="label">[ USER ]</span>
-                </div>
-                <textarea
-                  className="editor-textarea"
-                  placeholder="Generate ten variations of..."
-                  value={activePrompt}
-                  onChange={(e) => setActivePrompt(e.target.value)}
-                  style={{ minHeight: "200px" }}
-                />
-              </div>
+              ))}
             </div>
 
-            <div>
-              <button className="btn btn-primary" onClick={executePlayground}>
-                [ EXECUTE → ]
+            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+              <button 
+                className="btn btn-primary" 
+                onClick={executePlayground}
+                disabled={runState === "running"}
+              >
+                {runState === "idle" ? "[ RUN → ]" : runState === "running" ? "[ RUNNING... ]" : runState === "complete" ? "[ COMPLETE ]" : "[ ERROR ]"}
               </button>
+              
+              <div style={{ marginLeft: "16px", width: "120px" }}>
+                <Dropdown 
+                  title="ADD_PROMPT_BLOCK"
+                  value="+ ADD BLOCK"
+                  items={BLOCK_TYPES}
+                  onChange={addBlock}
+                  inline
+                />
+              </div>
             </div>
           </>
         )}
@@ -339,7 +424,7 @@ export default function Playground() {
             </div>
             <div className="preset-grid">
               {PRESETS.map((p) => (
-                <div key={p.id} className="artifact-card" style={{ cursor: "pointer" }} onClick={() => loadPreset(p)}>
+                <div key={p.id} className="artifact-card artifact-card-interactive" style={{ cursor: "pointer" }} onClick={() => loadPreset(p)}>
                   <div className="editor-block-header" style={{ display: "flex", justifyContent: "space-between" }}>
                     <span className="mono" style={{ fontWeight: 600 }}>{p.id}</span>
                     <span className="label">{p.tag}</span>
@@ -381,9 +466,7 @@ export default function Playground() {
               {/* SLOT 1 */}
               <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
                 {provider === "free" ? (
-                  <select value={compareModel1} onChange={(e) => setCompareModel1(e.target.value)}>
-                    {availableFreeModels.map(m => <option key={m} value={m}>{m}</option>)}
-                  </select>
+                  <Dropdown title="SELECT_MODEL" value={compareModel1} items={availableFreeModels} onChange={setCompareModel1} />
                 ) : (
                   <span className="label">USING DEFAULT PROVIDER MODEL</span>
                 )}
@@ -406,9 +489,7 @@ export default function Playground() {
               {/* SLOT 2 */}
               <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
                 {provider === "free" ? (
-                  <select value={compareModel2} onChange={(e) => setCompareModel2(e.target.value)}>
-                    {availableFreeModels.map(m => <option key={m} value={m}>{m}</option>)}
-                  </select>
+                  <Dropdown title="SELECT_MODEL" value={compareModel2} items={availableFreeModels} onChange={setCompareModel2} />
                 ) : (
                   <span className="label">USING DEFAULT PROVIDER MODEL</span>
                 )}
@@ -454,7 +535,7 @@ export default function Playground() {
           )}
 
           {archive.map((art) => (
-            <div key={art.id} className="artifact-card">
+            <div key={art.id} className="artifact-card artifact-card-interactive">
               <div className="artifact-meta">
                 <div className="artifact-meta-item">
                   <span className="label">ID</span>
@@ -499,8 +580,10 @@ export default function Playground() {
 
               <div className="artifact-actions">
                 <button className="artifact-action" onClick={() => {
-                  setActivePrompt(art.prompt);
-                  setActiveSystem(art.system);
+                  setBlocks([
+                    { id: "b1", type: "SYSTEM", content: art.system },
+                    { id: "b2", type: "USER", content: art.prompt }
+                  ]);
                   setCurrentView("playground");
                 }}>BRANCH</button>
                 <button className="artifact-action" onClick={() => navigator.clipboard.writeText(art.output)}>COPY</button>
