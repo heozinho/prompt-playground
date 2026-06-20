@@ -9,6 +9,7 @@ type Artifact = {
   prompt: string;
   system: string;
   output: string;
+  outputType?: "text" | "image";
   status: "running" | "success" | "error";
   modelUsed: string;
   keyMeta?: { budget: number; expires: string; rateLimit: string; attemptsUsed: number } | null;
@@ -42,6 +43,7 @@ const MODES: DropdownItem[] = [
 
 const PROVIDERS: DropdownItem[] = [
   { id: "free", label: "FREE COMMUNITY", meta: "GITHUB POOL" },
+  { id: "pollinations", label: "POLLINATIONS IMAGE", meta: "FREE" },
   { id: "groq", label: "GROQ", meta: "API" },
   { id: "openrouter", label: "OPENROUTER", meta: "API" }
 ];
@@ -126,6 +128,20 @@ export default function Playground() {
   }, [archive, isClient]);
 
   useEffect(() => {
+    if (provider === "pollinations") {
+      setFreeKeyCount(null);
+      setFreeKeyError("");
+      const imgModels = [
+        { id: "flux", label: "FLUX", meta: "DEFAULT" },
+        { id: "turbo", label: "TURBO", meta: "FAST" },
+        { id: "sana", label: "SANA", meta: "ALT" }
+      ];
+      setAvailableFreeModels(imgModels);
+      setCompareModel1("flux");
+      setCompareModel2("sana");
+      return;
+    }
+    
     if (provider !== "free") return;
     setFreeKeyCount(null);
     setFreeKeyError("");
@@ -211,11 +227,31 @@ export default function Playground() {
       prompt: combinedPrompt,
       system: sys,
       output: "",
+      outputType: provider === "pollinations" ? "image" : "text",
       status: "running",
-      modelUsed: forcedModel || (provider === "free" ? "AUTO" : (provider === "groq" ? "llama3-8b-8192" : "meta-llama/llama-3-8b-instruct:free"))
+      modelUsed: forcedModel || (provider === "free" ? "AUTO" : (provider === "pollinations" ? "flux" : (provider === "groq" ? "llama3-8b-8192" : "meta-llama/llama-3-8b-instruct:free")))
     };
 
     try {
+      if (provider === "pollinations") {
+        const seed = Math.floor(Math.random() * 1000000);
+        const mod = forcedModel || "flux";
+        const promptString = sys.trim() ? `${sys} ${combinedPrompt}` : combinedPrompt;
+        const imgUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(promptString)}?nologo=true&seed=${seed}&model=${mod}`;
+        
+        // Fetch to ensure we wait for it to generate so we get accurate runtime, but we just save the URL.
+        const res = await fetch(imgUrl);
+        if (!res.ok) throw new Error("Image generation failed");
+        
+        const runtime = Number(((Date.now() - startTime) / 1000).toFixed(1));
+        return {
+          ...initialArtifact,
+          status: "success",
+          output: imgUrl,
+          runtime,
+        };
+      }
+
       const fullPrompt = sys.trim() ? `System: ${sys}\n\n${combinedPrompt}` : combinedPrompt;
       const res = await fetch("/api/completion", {
         method: "POST",
@@ -333,11 +369,17 @@ export default function Playground() {
             />
           </div>
 
-          {provider === "free" ? (
+          {provider === "free" || provider === "pollinations" ? (
             <div className="free-key-status">
-              {freeKeyCount === null && !freeKeyError && <span style={{ color: "var(--text-muted)" }}>SYNCING...</span>}
-              {freeKeyCount !== null && <span style={{ color: "var(--text)" }}>STATUS: {freeKeyCount} KEYS ONLINE</span>}
-              {freeKeyError && <span style={{ color: "var(--danger)" }}>ERR: {freeKeyError}</span>}
+              {provider === "pollinations" ? (
+                <span style={{ color: "var(--text)" }}>STATUS: IMAGE ENGINE ONLINE</span>
+              ) : (
+                <>
+                  {freeKeyCount === null && !freeKeyError && <span style={{ color: "var(--text-muted)" }}>SYNCING...</span>}
+                  {freeKeyCount !== null && <span style={{ color: "var(--text)" }}>STATUS: {freeKeyCount} KEYS ONLINE</span>}
+                  {freeKeyError && <span style={{ color: "var(--danger)" }}>ERR: {freeKeyError}</span>}
+                </>
+              )}
             </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
@@ -465,7 +507,7 @@ export default function Playground() {
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px" }}>
               {/* SLOT 1 */}
               <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                {provider === "free" ? (
+                {provider === "free" || provider === "pollinations" ? (
                   <Dropdown title="SELECT_MODEL" value={compareModel1} items={availableFreeModels} onChange={setCompareModel1} />
                 ) : (
                   <span className="label">USING DEFAULT PROVIDER MODEL</span>
@@ -480,7 +522,11 @@ export default function Playground() {
                     <div className="artifact-content">
                       {compareOutput1.status === "running" && <span style={{ color: "var(--text-muted)" }}>[ PROCESSING ]</span>}
                       {compareOutput1.status === "error" && <span style={{ color: "red" }}>[ ERROR: {compareOutput1.output} ]</span>}
-                      {compareOutput1.status === "success" && compareOutput1.output}
+                      {compareOutput1.status === "success" && compareOutput1.outputType === "image" ? (
+                        <img src={compareOutput1.output} alt="Generated output" style={{ width: "100%", height: "auto", display: "block", border: "1px solid var(--text)" }} />
+                      ) : (
+                        compareOutput1.status === "success" && compareOutput1.output
+                      )}
                     </div>
                   </div>
                 )}
@@ -488,7 +534,7 @@ export default function Playground() {
 
               {/* SLOT 2 */}
               <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                {provider === "free" ? (
+                {provider === "free" || provider === "pollinations" ? (
                   <Dropdown title="SELECT_MODEL" value={compareModel2} items={availableFreeModels} onChange={setCompareModel2} />
                 ) : (
                   <span className="label">USING DEFAULT PROVIDER MODEL</span>
@@ -503,7 +549,11 @@ export default function Playground() {
                     <div className="artifact-content">
                       {compareOutput2.status === "running" && <span style={{ color: "var(--text-muted)" }}>[ PROCESSING ]</span>}
                       {compareOutput2.status === "error" && <span style={{ color: "red" }}>[ ERROR: {compareOutput2.output} ]</span>}
-                      {compareOutput2.status === "success" && compareOutput2.output}
+                      {compareOutput2.status === "success" && compareOutput2.outputType === "image" ? (
+                        <img src={compareOutput2.output} alt="Generated output" style={{ width: "100%", height: "auto", display: "block", border: "1px solid var(--text)" }} />
+                      ) : (
+                        compareOutput2.status === "success" && compareOutput2.output
+                      )}
                     </div>
                   </div>
                 )}
@@ -575,7 +625,11 @@ export default function Playground() {
               <div className="artifact-content">
                 {art.status === "running" && <span style={{ color: "var(--text-muted)" }}>[ PROCESSING ]</span>}
                 {art.status === "error" && <span style={{ color: "red" }}>[ ERROR: {art.output} ]</span>}
-                {art.status === "success" && art.output}
+                {art.status === "success" && art.outputType === "image" ? (
+                  <img src={art.output} alt="Generated output" style={{ width: "100%", height: "auto", display: "block", border: "1px solid var(--text)" }} />
+                ) : (
+                  art.status === "success" && art.output
+                )}
               </div>
 
               <div className="artifact-actions">
