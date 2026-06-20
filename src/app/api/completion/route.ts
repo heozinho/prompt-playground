@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { FreeKey } from "../free-keys/route";
 
 const FREE_KEY_BASE_URL = "https://aiapiv2.pekpik.com/v1/chat/completions";
-const MAX_KEY_ATTEMPTS = 3;
+const MAX_KEY_ATTEMPTS = 8;
 
 export async function POST(req: Request) {
   try {

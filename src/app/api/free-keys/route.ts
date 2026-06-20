@@ -124,6 +124,13 @@ function parseReadme(readme: string): FreeKey[] {
     keys.push({ key, model, budget, rateLimit, expires, description });
   }
 
+  // Shuffle the keys first so keys with the same budget are randomized
+  // This prevents always hitting the same dead keys at the top of the list
+  for (let i = keys.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [keys[i], keys[j]] = [keys[j], keys[i]];
+  }
+
   // Sort highest budget first — most likely to still have credit
   return keys.sort((a, b) => b.budget - a.budget);
 }
