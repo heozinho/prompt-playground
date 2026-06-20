@@ -1,438 +1,297 @@
-/* ============================================================
-   DESIGN TOKENS
-   ============================================================ */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+
 :root {
-  --bg: #0d0d0f;
-  --surface: #18181b;
-  --surface2: #222226;
-  --border: #2e2e33;
-  --text: #f4f4f5;
-  --text-muted: #71717a;
-  --primary: #6366f1;
-  --primary-hover: #4f46e5;
-  --danger: #ef4444;
-  --success: #22c55e;
-  --radius: 10px;
-  --radius-sm: 6px;
+  --bg: #F4F4F1;
+  --bg-panel: #EFEFEA;
+  --bg-card: #FFFFFF;
+  --text: #111111;
+  --text-muted: #666666;
+  --border: #DDDDDD;
+  --border-dark: #333333;
+  --accent: #E2FF00; /* acid yellow for run status / selection */
+  --accent-text: #000000;
+  
+  --font-sans: 'Inter', sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  
+  /* The design lab brief demands NO rounded corners, no shadows */
 }
 
-/* ============================================================
-   RESET & BASE
-   ============================================================ */
-*, *::before, *::after {
+* {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
 }
 
-html, body {
-  height: 100%;
-  overflow: hidden;
-}
-
 body {
-  background: var(--bg);
+  font-family: var(--font-sans);
+  background-color: var(--bg);
   color: var(--text);
-  font-family: var(--font-inter), -apple-system, sans-serif;
-  font-size: 14px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  /* Optional: faint grain texture can be done via a repeating noise svg, but flat is safer for now */
 }
 
-button {
-  font-family: inherit;
-  font-size: inherit;
-  cursor: pointer;
-  border: none;
-  outline: none;
-  transition: opacity 0.15s, background 0.15s;
-}
-
-button:hover:not(:disabled) {
-  opacity: 0.85;
-}
-
-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
-}
-
-input, textarea, select {
-  font-family: inherit;
-  font-size: inherit;
-  color: var(--text);
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 8px 10px;
-  outline: none;
-  width: 100%;
-  transition: border-color 0.15s;
-}
-
-input:focus, textarea:focus, select:focus {
-  border-color: var(--primary);
-}
-
-textarea {
-  resize: vertical;
-  line-height: 1.6;
-}
-
-label {
-  display: block;
-  font-size: 11px;
+/* Typography styles */
+.label {
+  font-family: var(--font-sans);
+  font-size: 10px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.05em;
   color: var(--text-muted);
-  margin-bottom: 4px;
+}
+
+.title {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: 12px;
 }
 
 /* ============================================================
-   LAYOUT SHELL
+   3-PANE LAYOUT
    ============================================================ */
 .app-shell {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 240px 1fr 400px; /* Left Sidebar, Center Command, Right Archive */
   height: 100vh;
   overflow: hidden;
 }
 
-/* ============================================================
-   TOPBAR
-   ============================================================ */
-.topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 20px;
-  height: 52px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
-  z-index: 10;
-}
-
-.topbar-title {
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: -0.3px;
-}
-
-.topbar-actions {
-  display: flex;
-  gap: 8px;
-}
-
-/* ============================================================
-   USER INPUT BAR (test message)
-   ============================================================ */
-.input-bar {
-  padding: 12px 20px;
-  background: var(--surface2);
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-}
-
-.input-bar textarea {
-  flex: 1;
-  min-height: 64px;
-  max-height: 150px;
-  background: var(--bg);
-}
-
-/* ============================================================
-   VARIANTS RAIL
-   ============================================================ */
-.variants-rail {
-  flex: 1;
-  overflow-x: auto;
-  overflow-y: hidden;
-  display: flex;
-  gap: 16px;
-  padding: 16px 20px;
-  align-items: stretch;
-}
-
-/* ============================================================
-   VARIANT CARD
-   ============================================================ */
-.variant-card {
-  width: 380px;
-  flex-shrink: 0;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+/* Left Sidebar */
+.sidebar {
+  border-right: 1px solid var(--border-dark);
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  background: var(--bg-panel);
 }
 
-.variant-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
+.sidebar-header {
+  padding: 24px;
+  border-bottom: 1px solid var(--border-dark);
 }
 
-.variant-name-input {
-  flex: 1;
-  background: transparent;
-  border: none;
-  font-size: 14px;
+.sidebar-brand {
+  font-size: 16px;
   font-weight: 600;
-  padding: 2px 0;
-  color: var(--text);
-  width: 100%;
-}
-
-.variant-name-input:focus {
-  border: none;
-  outline: none;
-}
-
-.variant-body {
-  flex: 1;
-  overflow-y: auto;
-  padding: 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.variant-output {
-  padding: 10px 14px;
-  border-top: 1px solid var(--border);
-  flex-shrink: 0;
-  min-height: 110px;
-  max-height: 200px;
-  overflow-y: auto;
-  font-size: 13px;
-  white-space: pre-wrap;
-  line-height: 1.6;
-}
-
-.variant-output.idle { color: var(--text-muted); font-style: italic; }
-.variant-output.loading { color: var(--text-muted); }
-.variant-output.error { color: var(--danger); }
-.variant-output.success { color: var(--text); }
-
-/* ============================================================
-   MODE TOGGLE
-   ============================================================ */
-.mode-toggle {
-  display: flex;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 2px;
-  gap: 2px;
-}
-
-.mode-btn {
-  padding: 3px 12px;
-  border-radius: 4px;
-  font-size: 12px;
-  font-weight: 500;
-  background: transparent;
-  color: var(--text-muted);
-}
-
-.mode-btn.active {
-  background: var(--surface2);
-  color: var(--text);
-  font-weight: 600;
-}
-
-/* ============================================================
-   FIELD GROUP
-   ============================================================ */
-.field-group {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.field-label-primary {
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--primary);
+  letter-spacing: -0.02em;
   margin-bottom: 4px;
 }
 
-/* ============================================================
-   ADD VARIANT BUTTON
-   ============================================================ */
-.add-variant-btn {
-  width: 220px;
-  flex-shrink: 0;
-  background: transparent;
-  border: 2px dashed var(--border);
-  border-radius: var(--radius);
+.sidebar-meta {
+  font-size: 10px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.sidebar-section {
+  padding: 24px;
+  border-bottom: 1px solid var(--border);
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  color: var(--text-muted);
-  font-size: 13px;
+  gap: 16px;
+}
+
+.nav-link {
+  font-size: 11px;
   font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
   cursor: pointer;
-  transition: border-color 0.15s, color 0.15s;
-  min-height: 100px;
+  text-decoration: none;
+  background: none;
+  border: none;
+  text-align: left;
 }
 
-.add-variant-btn:hover {
-  border-color: var(--primary);
+.nav-link:hover, .nav-link.active {
   color: var(--text);
-  opacity: 1;
+  font-weight: 600;
 }
 
-/* ============================================================
-   BUTTONS
-   ============================================================ */
-.btn {
-  padding: 6px 14px;
-  border-radius: var(--radius-sm);
-  font-weight: 600;
+/* Inputs & Controls */
+input, select, textarea {
+  font-family: var(--font-sans);
   font-size: 13px;
+  background: transparent;
+  border: 1px solid var(--border);
+  padding: 8px 10px;
+  color: var(--text);
+  outline: none;
+  width: 100%;
+}
+
+input:focus, select:focus, textarea:focus {
+  border-color: var(--border-dark);
+}
+
+/* Center Command Center */
+.command-center {
+  padding: 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  overflow-y: auto;
+}
+
+.editor-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 12px;
+}
+
+.editor-block {
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  display: flex;
+  flex-direction: column;
+}
+
+.editor-block-header {
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+}
+
+.editor-textarea {
+  border: none;
+  resize: vertical;
+  min-height: 120px;
+  padding: 16px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.btn {
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: transparent;
+  border: 1px solid var(--border-dark);
+  color: var(--text);
+  padding: 10px 16px;
+  cursor: pointer;
+  transition: all 0.1s;
+}
+
+.btn:hover {
+  background: var(--border-dark);
+  color: var(--bg);
 }
 
 .btn-primary {
-  background: var(--primary);
-  color: white;
-}
-
-.btn-ghost {
-  background: transparent;
-  border: 1px solid var(--border);
-  color: var(--text);
-}
-
-.btn-danger-ghost {
-  background: transparent;
-  border: 1px solid transparent;
-  color: var(--danger);
-  padding: 6px 8px;
-}
-
-.btn-run-all {
   background: var(--text);
   color: var(--bg);
 }
 
-/* ============================================================
-   MODAL OVERLAY
-   ============================================================ */
-.modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.7);
-  backdrop-filter: blur(6px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 9999;
+.btn-primary:hover {
+  background: var(--accent);
+  color: var(--accent-text);
+  border-color: var(--accent);
 }
 
-.modal-box {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 28px;
-  width: 440px;
-  max-width: 92vw;
+.btn-ghost {
+  border-color: transparent;
+}
+.btn-ghost:hover {
+  background: rgba(0,0,0,0.05);
+  color: var(--text);
+}
+
+/* Right Archive */
+.archive-pane {
+  border-left: 1px solid var(--border-dark);
+  background: var(--bg-panel);
   display: flex;
   flex-direction: column;
-  gap: 20px;
 }
 
-.modal-title {
-  font-size: 16px;
-  font-weight: 700;
+.archive-header {
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border);
 }
 
-.modal-actions {
-  display: flex;
-  gap: 10px;
-  justify-content: flex-end;
-}
-
-/* ============================================================
-   SCROLLBAR
-   ============================================================ */
-::-webkit-scrollbar { width: 5px; height: 5px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 999px; }
-
-/* ============================================================
-   PROVIDER BADGE (topbar)
-   ============================================================ */
-.provider-badge {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--success);
-  background: rgba(34, 197, 94, 0.1);
-  border: 1px solid rgba(34, 197, 94, 0.25);
-  border-radius: var(--radius-sm);
-  padding: 3px 8px;
-  letter-spacing: 0.02em;
-}
-
-/* ============================================================
-   FREE KEY STATUS (settings modal)
-   ============================================================ */
-.free-key-status {
-  background: var(--surface2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 12px 14px;
+.archive-feed {
+  padding: 24px;
   display: flex;
   flex-direction: column;
+  gap: 24px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.artifact-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+}
+
+.artifact-meta {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  background: var(--bg-panel);
+}
+
+.artifact-meta-item {
+  display: flex;
   gap: 4px;
 }
 
-.free-key-loading {
-  font-size: 13px;
-  color: var(--text-muted);
+.artifact-content {
+  padding: 16px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
-.free-key-ok {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--success);
-}
-
-.free-key-err {
-  font-size: 13px;
-  color: var(--danger);
-}
-
-/* ============================================================
-   KEY META BADGE (variant card, below output)
-   ============================================================ */
-.key-meta-badge {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-  padding: 6px 14px;
+.artifact-actions {
+  padding: 8px 12px;
   border-top: 1px solid var(--border);
-  font-size: 11px;
-  color: var(--text-muted);
-  background: var(--surface2);
-  flex-shrink: 0;
+  display: flex;
+  gap: 12px;
 }
 
-.key-meta-retried {
-  color: var(--danger);
+.artifact-action {
+  background: none;
+  border: none;
+  font-size: 10px;
   font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  cursor: pointer;
 }
+.artifact-action:hover {
+  color: var(--text);
+  text-decoration: underline;
+}
+
+/* Free Key Sidebar Status */
+.free-key-status {
+  margin-top: 8px;
+  font-size: 11px;
+}
+
+/* Scrollbars */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; border-left: 1px solid var(--border); }
+::-webkit-scrollbar-thumb { background: #ccc; }
+::-webkit-scrollbar-thumb:hover { background: #999; }

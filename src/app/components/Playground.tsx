@@ -2,77 +2,65 @@
 
 import { useState, useEffect } from "react";
 
-// ── Types ────────────────────────────────────────────────────
-type Fields = {
-  role: string;
-  task: string;
-  constraints: string;
-  examples: string;
-  format: string;
-  failureRules: string;
-};
-
-type Variant = {
+type Artifact = {
   id: string;
-  name: string;
-  mode: "builder" | "raw";
-  fields: Fields;
-  rawPrompt: string;
+  timestamp: string;
+  prompt: string;
+  system: string;
   output: string;
-  status: "idle" | "loading" | "success" | "error";
-  keyMeta?: { model: string; budget: number; expires: string; rateLimit: string; attemptsUsed: number } | null;
+  status: "running" | "success" | "error";
+  modelUsed: string;
+  keyMeta?: { budget: number; expires: string; rateLimit: string; attemptsUsed: number } | null;
+  runtime?: number;
 };
 
-// ── Helpers ──────────────────────────────────────────────────
-function buildPrompt(v: Variant, userInput: string): string {
-  let systemPart = "";
-
-  if (v.mode === "raw") {
-    systemPart = v.rawPrompt;
-  } else {
-    const parts: string[] = [];
-    if (v.fields.role) parts.push(`[Role]\n${v.fields.role}`);
-    if (v.fields.task) parts.push(`[Task]\n${v.fields.task}`);
-    if (v.fields.constraints) parts.push(`[Constraints]\n${v.fields.constraints}`);
-    if (v.fields.examples) parts.push(`[Examples]\n${v.fields.examples}`);
-    if (v.fields.format) parts.push(`[Output Format]\n${v.fields.format}`);
-    if (v.fields.failureRules) parts.push(`[Failure Rules]\n${v.fields.failureRules}`);
-    systemPart = parts.join("\n\n");
-  }
-
-  return userInput
-    ? `${systemPart}\n\n---\nInput:\n${userInput}`
-    : systemPart;
-}
-
-let variantCounter = 1;
-function newVariant(name?: string): Variant {
-  variantCounter++;
-  return {
-    id: `v-${Date.now()}-${variantCounter}`,
-    name: name ?? `Variant ${String.fromCharCode(64 + variantCounter)}`,
-    mode: "builder",
-    fields: { role: "", task: "", constraints: "", examples: "", format: "", failureRules: "" },
-    rawPrompt: "",
-    output: "",
-    status: "idle",
-  };
-}
-
-// ── Settings Modal ────────────────────────────────────────────
-function SettingsModal({ onClose }: { onClose: () => void }) {
-  const [apiKey, setApiKey] = useState("");
+export default function Playground() {
+  // ── State ────────────────────────────────────────────────────────
+  const [isClient, setIsClient] = useState(false);
+  
+  // Left: Settings & Meta
   const [provider, setProvider] = useState("free");
-  const [saved, setSaved] = useState(false);
+  const [apiKey, setApiKey] = useState("");
   const [freeKeyCount, setFreeKeyCount] = useState<number | null>(null);
   const [freeKeyError, setFreeKeyError] = useState("");
 
+  // Center: Active Command Center
+  const [activeSystem, setActiveSystem] = useState("");
+  const [activePrompt, setActivePrompt] = useState("");
+  const [activeModel, setActiveModel] = useState("auto"); // For free keys it's auto, for Groq it's llama3...
+  
+  // Right: Archive
+  const [archive, setArchive] = useState<Artifact[]>([]);
+
+  // ── Initialization & Persistence ──────────────────────────────────
   useEffect(() => {
-    setApiKey(localStorage.getItem("pp_key") ?? "");
+    setIsClient(true);
     setProvider(localStorage.getItem("pp_provider") ?? "free");
+    setApiKey(localStorage.getItem("pp_key") ?? "");
+    const savedArchive = localStorage.getItem("pp_archive");
+    if (savedArchive) {
+      try {
+        setArchive(JSON.parse(savedArchive));
+      } catch (e) {
+        console.error("Failed to parse archive", e);
+      }
+    }
   }, []);
 
-  // Fetch free key count whenever the modal opens or provider switches to free
+  // Save settings when changed
+  useEffect(() => {
+    if (!isClient) return;
+    localStorage.setItem("pp_provider", provider);
+    localStorage.setItem("pp_key", apiKey.trim());
+  }, [provider, apiKey, isClient]);
+
+  // Save archive when changed
+  useEffect(() => {
+    if (!isClient) return;
+    localStorage.setItem("pp_archive", JSON.stringify(archive));
+  }, [archive, isClient]);
+
+  // Fetch free keys status
   useEffect(() => {
     if (provider !== "free") return;
     setFreeKeyCount(null);
@@ -86,336 +74,249 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
       .catch(() => setFreeKeyError("Could not reach key list"));
   }, [provider]);
 
-  function save() {
-    localStorage.setItem("pp_key", apiKey.trim());
-    localStorage.setItem("pp_provider", provider);
-    setSaved(true);
-    setTimeout(onClose, 700);
-  }
+  // ── Execution ─────────────────────────────────────────────────────
+  async function executePrompt() {
+    if (!activePrompt.trim()) return;
 
-  return (
-    <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal-box">
-        <h2 className="modal-title">Settings</h2>
-
-        <div className="field-group">
-          <label>Provider</label>
-          <select value={provider} onChange={(e) => setProvider(e.target.value)}>
-            <option value="free">🆓 Community Keys — zero setup, auto-refreshed</option>
-            <option value="groq">Groq — free at console.groq.com</option>
-            <option value="openrouter">OpenRouter — free tier at openrouter.ai</option>
-          </select>
-        </div>
-
-        {provider === "free" ? (
-          <div className="free-key-status">
-            {freeKeyCount === null && !freeKeyError && (
-              <span className="free-key-loading">⟳ Checking available keys…</span>
-            )}
-            {freeKeyCount !== null && (
-              <span className="free-key-ok">✓ {freeKeyCount} community key{freeKeyCount !== 1 ? "s" : ""} available right now</span>
-            )}
-            {freeKeyError && (
-              <span className="free-key-err">⚠ {freeKeyError}</span>
-            )}
-            <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 6 }}>
-              Keys are sourced from{" "}
-              <a href="https://github.com/alistaitsacle/free-llm-api-keys" target="_blank" rel="noreferrer" style={{ color: "var(--primary)" }}>
-                alistaitsacle/free-llm-api-keys
-              </a>
-              . They expire in 24–48h and budgets are shared — if one fails the app retries automatically.
-            </p>
-          </div>
-        ) : (
-          <div className="field-group">
-            <label>API Key</label>
-            <input
-              type="password"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder={provider === "groq" ? "gsk_..." : "sk-or-..."}
-              style={{ fontFamily: "monospace" }}
-            />
-            <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4 }}>
-              Stored in your browser only — never leaves your machine except to call the AI.
-            </p>
-          </div>
-        )}
-
-        <div className="modal-actions">
-          <button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button>
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={save}
-            style={{ background: saved ? "var(--success)" : undefined }}
-          >
-            {saved ? "✓ Saved" : "Save"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Variant Card ──────────────────────────────────────────────
-const FIELDS: { key: keyof Fields; label: string; placeholder: string }[] = [
-  { key: "role",         label: "Role / Context",  placeholder: "e.g. You are a strict JSON extractor…" },
-  { key: "task",         label: "Task",             placeholder: "e.g. Extract: company, role, salary, location…" },
-  { key: "constraints",  label: "Constraints",      placeholder: "e.g. No filler, never guess…" },
-  { key: "examples",     label: "Examples",         placeholder: "Input: …\nOutput: …" },
-  { key: "format",       label: "Output Format",    placeholder: "e.g. Return valid JSON only." },
-  { key: "failureRules", label: "Failure Rules",    placeholder: "e.g. Use null for missing fields." },
-];
-
-function VariantCard({
-  variant,
-  onChange,
-  onRun,
-  onRemove,
-}: {
-  variant: Variant;
-  onChange: (v: Variant) => void;
-  onRun: () => void;
-  onRemove: () => void;
-}) {
-  function setField(key: keyof Fields, val: string) {
-    onChange({ ...variant, fields: { ...variant.fields, [key]: val } });
-  }
-
-  function switchToRaw() {
-    const combined = FIELDS
-      .filter(({ key }) => variant.fields[key])
-      .map(({ key, label }) => `[${label}]\n${variant.fields[key]}`)
-      .join("\n\n");
-    onChange({ ...variant, mode: "raw", rawPrompt: variant.rawPrompt || combined });
-  }
-
-  return (
-    <div className="variant-card">
-      {/* Header */}
-      <div className="variant-header">
-        <input
-          className="variant-name-input"
-          value={variant.name}
-          onChange={(e) => onChange({ ...variant, name: e.target.value })}
-        />
-        <button
-          type="button"
-          className="btn btn-primary"
-          onClick={onRun}
-          disabled={variant.status === "loading"}
-          style={{ flexShrink: 0 }}
-        >
-          {variant.status === "loading" ? "Running…" : "▶ Run"}
-        </button>
-        <button type="button" className="btn btn-danger-ghost" onClick={onRemove} style={{ flexShrink: 0 }}>
-          ✕
-        </button>
-      </div>
-
-      {/* Body */}
-      <div className="variant-body">
-        {/* Mode toggle */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--text-muted)" }}>
-            Prompt
-          </span>
-          <div className="mode-toggle">
-            <button
-              type="button"
-              className={`mode-btn ${variant.mode === "builder" ? "active" : ""}`}
-              onClick={() => onChange({ ...variant, mode: "builder" })}
-            >
-              Builder
-            </button>
-            <button
-              type="button"
-              className={`mode-btn ${variant.mode === "raw" ? "active" : ""}`}
-              onClick={switchToRaw}
-            >
-              Raw
-            </button>
-          </div>
-        </div>
-
-        {/* Fields */}
-        {variant.mode === "builder" ? (
-          FIELDS.map(({ key, label, placeholder }) => (
-            <div className="field-group" key={key}>
-              <div className="field-label-primary">{label}</div>
-              <textarea
-                value={variant.fields[key]}
-                onChange={(e) => setField(key, e.target.value)}
-                placeholder={placeholder}
-                rows={2}
-              />
-            </div>
-          ))
-        ) : (
-          <textarea
-            value={variant.rawPrompt}
-            onChange={(e) => onChange({ ...variant, rawPrompt: e.target.value })}
-            placeholder="Write your full prompt here…"
-            rows={14}
-          />
-        )}
-      </div>
-
-      {/* Output */}
-      <div className={`variant-output ${variant.status}`}>
-        {variant.status === "idle" && "Output will appear here after you hit Run."}
-        {variant.status === "loading" && "Thinking…"}
-        {(variant.status === "success" || variant.status === "error") && variant.output}
-      </div>
-
-      {/* Key meta badge — only shown when a community key was used */}
-      {variant.keyMeta && variant.status === "success" && (
-        <div className="key-meta-badge">
-          <span>⚡ {variant.keyMeta.model}</span>
-          <span>·</span>
-          <span>${variant.keyMeta.budget} budget</span>
-          <span>·</span>
-          <span>expires {variant.keyMeta.expires}</span>
-          <span>·</span>
-          <span>{variant.keyMeta.rateLimit}</span>
-          {variant.keyMeta.attemptsUsed > 1 && (
-            <><span>·</span><span className="key-meta-retried">retried {variant.keyMeta.attemptsUsed - 1}×</span></>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Main Playground ───────────────────────────────────────────
-export default function Playground() {
-  const [variants, setVariants] = useState<Variant[]>([
-    {
-      id: "v-init",
-      name: "Variant A",
-      mode: "builder",
-      fields: {
-        role: "You are a strict JSON extractor.",
-        task: "Extract only:\n- company\n- role\n- salary\n- location",
-        constraints: "",
-        examples: "",
-        format: "Return valid JSON only.",
-        failureRules: "If missing, use null.",
-      },
-      rawPrompt: "",
+    const runId = Math.random().toString(36).substring(2, 9).toUpperCase();
+    const startTime = Date.now();
+    
+    // Create pending artifact
+    const newArtifact: Artifact = {
+      id: runId,
+      timestamp: new Date().toLocaleTimeString([], { hour12: false }),
+      prompt: activePrompt,
+      system: activeSystem,
       output: "",
-      status: "idle",
-    },
-  ]);
-  const [userInput, setUserInput] = useState("");
-  const [showSettings, setShowSettings] = useState(false);
-  const [activeProvider, setActiveProvider] = useState<string>("free");
+      status: "running",
+      modelUsed: provider === "free" ? "AUTO" : (provider === "groq" ? "llama3-8b-8192" : "meta-llama/llama-3-8b-instruct:free")
+    };
 
-  // Keep activeProvider in sync with localStorage so the topbar reflects it
-  useEffect(() => {
-    setActiveProvider(localStorage.getItem("pp_provider") ?? "free");
-  }, [showSettings]); // re-read whenever settings modal closes
-
-  function updateVariant(updated: Variant) {
-    setVariants((prev) => prev.map((v) => (v.id === updated.id ? updated : v)));
-  }
-
-  function addVariant() {
-    setVariants((prev) => [...prev, newVariant()]);
-  }
-
-  function removeVariant(id: string) {
-    setVariants((prev) => prev.filter((v) => v.id !== id));
-  }
-
-  async function runVariant(variant: Variant) {
-    const prompt = buildPrompt(variant, userInput);
-
-    if (!prompt.trim()) {
-      updateVariant({ ...variant, status: "error", output: "Nothing to send — fill in at least one field." });
-      return;
-    }
-
-    updateVariant({ ...variant, status: "loading", output: "", keyMeta: null });
+    setArchive((prev) => [newArtifact, ...prev]);
 
     try {
-      const apiKey = localStorage.getItem("pp_key") ?? "";
-      const provider = localStorage.getItem("pp_provider") ?? "free";
+      const fullPrompt = activeSystem.trim() 
+        ? `System: ${activeSystem}\n\nUser: ${activePrompt}`
+        : activePrompt;
 
       const res = await fetch("/api/completion", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt, apiKey, provider }),
+        body: JSON.stringify({ prompt: fullPrompt, apiKey, provider }),
       });
 
       const data = await res.json();
+      const runtime = Number(((Date.now() - startTime) / 1000).toFixed(1));
+
       if (!res.ok) throw new Error(data.error ?? "API request failed");
-      updateVariant({
-        ...variant,
-        status: "success",
-        output: data.output,
-        keyMeta: data.keyMeta ?? null,
-      });
+
+      setArchive((prev) =>
+        prev.map((a) =>
+          a.id === runId
+            ? {
+                ...a,
+                status: "success",
+                output: data.output,
+                modelUsed: data.model || a.modelUsed,
+                keyMeta: data.keyMeta ?? null,
+                runtime,
+              }
+            : a
+        )
+      );
     } catch (err: any) {
-      updateVariant({ ...variant, status: "error", output: err.message, keyMeta: null });
+      const runtime = Number(((Date.now() - startTime) / 1000).toFixed(1));
+      setArchive((prev) =>
+        prev.map((a) =>
+          a.id === runId
+            ? { ...a, status: "error", output: err.message, runtime }
+            : a
+        )
+      );
     }
   }
 
-  function runAll() {
-    variants.forEach((v, i) => setTimeout(() => runVariant(v), i * 300));
+  function clearArchive() {
+    if (confirm("Clear all archived outputs?")) {
+      setArchive([]);
+    }
   }
+
+  function loadToCenter(a: Artifact) {
+    setActivePrompt(a.prompt);
+    setActiveSystem(a.system);
+  }
+
+  // Prevents hydration mismatch
+  if (!isClient) return null;
 
   return (
     <div className="app-shell">
-      {/* Topbar */}
-      <header className="topbar">
-        <span className="topbar-title">Prompt Playground</span>
-        <div className="topbar-actions">
-          {activeProvider === "free" && (
-            <span className="provider-badge">🆓 community keys</span>
+      
+      {/* ── LEFT SIDEBAR ───────────────────────────────────────────────── */}
+      <aside className="sidebar">
+        <div className="sidebar-header">
+          <div className="sidebar-brand">PROMPTLAB.</div>
+          <div className="sidebar-meta">LOCAL WORKSPACE</div>
+        </div>
+
+        <div className="sidebar-section">
+          <span className="label">Navigation</span>
+          <button className="nav-link active">PLAYGROUND</button>
+          <button className="nav-link">PRESETS</button>
+          <button className="nav-link">ARCHIVE</button>
+        </div>
+
+        <div className="sidebar-section">
+          <span className="label">Configuration</span>
+          
+          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+            <span className="label" style={{ fontSize: "9px" }}>Provider</span>
+            <select value={provider} onChange={(e) => setProvider(e.target.value)}>
+              <option value="free">FREE COMMUNITY</option>
+              <option value="groq">GROQ</option>
+              <option value="openrouter">OPENROUTER</option>
+            </select>
+          </div>
+
+          {provider === "free" ? (
+            <div className="free-key-status">
+              {freeKeyCount === null && !freeKeyError && <span style={{ color: "var(--text-muted)" }}>SYNCING...</span>}
+              {freeKeyCount !== null && <span style={{ color: "var(--text)" }}>STATUS: {freeKeyCount} KEYS ONLINE</span>}
+              {freeKeyError && <span style={{ color: "var(--danger)" }}>ERR: {freeKeyError}</span>}
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              <span className="label" style={{ fontSize: "9px" }}>API Key</span>
+              <input
+                type="password"
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                placeholder="sk-..."
+                className="mono"
+              />
+            </div>
           )}
-          <button type="button" className="btn btn-ghost" onClick={() => setShowSettings(true)}>
-            ⚙ Settings
-          </button>
-          <button type="button" className="btn btn-run-all" onClick={runAll}>
-            ▶ Run All
+        </div>
+      </aside>
+
+      {/* ── CENTER COMMAND ─────────────────────────────────────────────── */}
+      <main className="command-center">
+        <div className="editor-header">
+          <div>
+            <span className="title">ACTIVE_EXPERIMENT</span>
+          </div>
+          <div style={{ display: "flex", gap: "16px", alignItems: "center" }}>
+            <span className="label">MODE: RAW</span>
+            <span className="label">TEMP: 0.7</span>
+          </div>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+          
+          <div className="editor-block">
+            <div className="editor-block-header">
+              <span className="label">[ SYSTEM ]</span>
+            </div>
+            <textarea
+              className="editor-textarea"
+              placeholder="You are a cold visual prompt assistant..."
+              value={activeSystem}
+              onChange={(e) => setActiveSystem(e.target.value)}
+              style={{ minHeight: "80px" }}
+            />
+          </div>
+
+          <div className="editor-block">
+            <div className="editor-block-header">
+              <span className="label">[ USER ]</span>
+            </div>
+            <textarea
+              className="editor-textarea"
+              placeholder="Generate ten variations of..."
+              value={activePrompt}
+              onChange={(e) => setActivePrompt(e.target.value)}
+              style={{ minHeight: "200px" }}
+            />
+          </div>
+
+        </div>
+
+        <div>
+          <button className="btn btn-primary" onClick={executePrompt}>
+            [ EXECUTE → ]
           </button>
         </div>
-      </header>
+      </main>
 
-      {/* User test input */}
-      <div className="input-bar">
-        <div style={{ flex: 1 }}>
-          <label style={{ marginBottom: 6 }}>Test Input (sent to every variant)</label>
-          <textarea
-            value={userInput}
-            onChange={(e) => setUserInput(e.target.value)}
-            placeholder="e.g. We're hiring a Senior Dev at Google, London, £90k–£120k"
-            rows={3}
-          />
+      {/* ── RIGHT ARCHIVE ──────────────────────────────────────────────── */}
+      <aside className="archive-pane">
+        <div className="archive-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span className="title">OUTPUT_ARCHIVE</span>
+          {archive.length > 0 && (
+            <button className="nav-link" onClick={clearArchive} style={{ fontSize: "9px" }}>CLEAR</button>
+          )}
         </div>
-      </div>
 
-      {/* Variants */}
-      <div className="variants-rail">
-        {variants.map((v) => (
-          <VariantCard
-            key={v.id}
-            variant={v}
-            onChange={updateVariant}
-            onRun={() => runVariant(v)}
-            onRemove={() => removeVariant(v.id)}
-          />
-        ))}
-        <button type="button" className="add-variant-btn" onClick={addVariant}>
-          <span style={{ fontSize: 28, lineHeight: 1, pointerEvents: "none" }}>+</span>
-          Add Variant
-        </button>
-      </div>
+        <div className="archive-feed">
+          {archive.length === 0 && (
+            <div className="label" style={{ textAlign: "center", marginTop: "40px" }}>NO ARTIFACTS SAVED</div>
+          )}
 
-      {/* Settings Modal */}
-      {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
+          {archive.map((art) => (
+            <div key={art.id} className="artifact-card">
+              <div className="artifact-meta">
+                <div className="artifact-meta-item">
+                  <span className="label">ID</span>
+                  <span className="mono">{art.id}</span>
+                </div>
+                <div className="artifact-meta-item">
+                  <span className="label">TIME</span>
+                  <span className="mono">{art.timestamp}</span>
+                </div>
+                <div className="artifact-meta-item">
+                  <span className="label">MODEL</span>
+                  <span className="mono">{art.modelUsed}</span>
+                </div>
+                {art.runtime && (
+                  <div className="artifact-meta-item">
+                    <span className="label">SPEED</span>
+                    <span className="mono">{art.runtime}s</span>
+                  </div>
+                )}
+              </div>
+
+              {art.keyMeta && (
+                <div className="artifact-meta" style={{ borderTop: "none", paddingTop: 0 }}>
+                  <div className="artifact-meta-item">
+                    <span className="label">BUDGET</span>
+                    <span className="mono">${art.keyMeta.budget}</span>
+                  </div>
+                  {art.keyMeta.attemptsUsed > 1 && (
+                    <div className="artifact-meta-item">
+                      <span className="label">RETRIES</span>
+                      <span className="mono">{art.keyMeta.attemptsUsed - 1}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="artifact-content">
+                {art.status === "running" && <span style={{ color: "var(--text-muted)" }}>[ PROCESSING ]</span>}
+                {art.status === "error" && <span style={{ color: "red" }}>[ ERROR: {art.output} ]</span>}
+                {art.status === "success" && art.output}
+              </div>
+
+              <div className="artifact-actions">
+                <button className="artifact-action" onClick={() => loadToCenter(art)}>BRANCH</button>
+                <button className="artifact-action" onClick={() => navigator.clipboard.writeText(art.output)}>COPY</button>
+                <button className="artifact-action" onClick={() => setArchive(archive.filter(a => a.id !== art.id))}>DELETE</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </aside>
+
     </div>
   );
 }
