@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 // ── Types ────────────────────────────────────────────────────
 type Fields = {
@@ -60,9 +60,14 @@ function newVariant(name?: string): Variant {
 
 // ── Settings Modal ────────────────────────────────────────────
 function SettingsModal({ onClose }: { onClose: () => void }) {
-  const [apiKey, setApiKey] = useState(() => localStorage.getItem("pp_key") ?? "");
-  const [provider, setProvider] = useState(() => localStorage.getItem("pp_provider") ?? "groq");
+  const [apiKey, setApiKey] = useState("");
+  const [provider, setProvider] = useState("groq");
   const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    setApiKey(localStorage.getItem("pp_key") ?? "");
+    setProvider(localStorage.getItem("pp_provider") ?? "groq");
+  }, []);
 
   function save() {
     localStorage.setItem("pp_key", apiKey.trim());
@@ -99,8 +104,9 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
         </div>
 
         <div className="modal-actions">
-          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          <button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button>
           <button
+            type="button"
             className="btn btn-primary"
             onClick={save}
             style={{ background: saved ? "var(--success)" : undefined }}
@@ -156,6 +162,7 @@ function VariantCard({
           onChange={(e) => onChange({ ...variant, name: e.target.value })}
         />
         <button
+          type="button"
           className="btn btn-primary"
           onClick={onRun}
           disabled={variant.status === "loading"}
@@ -163,7 +170,7 @@ function VariantCard({
         >
           {variant.status === "loading" ? "Running…" : "▶ Run"}
         </button>
-        <button className="btn btn-danger-ghost" onClick={onRemove} style={{ flexShrink: 0 }}>
+        <button type="button" className="btn btn-danger-ghost" onClick={onRemove} style={{ flexShrink: 0 }}>
           ✕
         </button>
       </div>
@@ -177,12 +184,14 @@ function VariantCard({
           </span>
           <div className="mode-toggle">
             <button
+              type="button"
               className={`mode-btn ${variant.mode === "builder" ? "active" : ""}`}
               onClick={() => onChange({ ...variant, mode: "builder" })}
             >
               Builder
             </button>
             <button
+              type="button"
               className={`mode-btn ${variant.mode === "raw" ? "active" : ""}`}
               onClick={switchToRaw}
             >
@@ -306,10 +315,10 @@ export default function Playground() {
       <header className="topbar">
         <span className="topbar-title">Prompt Playground</span>
         <div className="topbar-actions">
-          <button className="btn btn-ghost" onClick={() => setShowSettings(true)}>
+          <button type="button" className="btn btn-ghost" onClick={() => setShowSettings(true)}>
             ⚙ Settings
           </button>
-          <button className="btn btn-run-all" onClick={runAll}>
+          <button type="button" className="btn btn-run-all" onClick={runAll}>
             ▶ Run All
           </button>
         </div>
@@ -339,8 +348,8 @@ export default function Playground() {
             onRemove={() => removeVariant(v.id)}
           />
         ))}
-        <button className="add-variant-btn" onClick={addVariant}>
-          <span style={{ fontSize: 28, lineHeight: 1 }}>+</span>
+        <button type="button" className="add-variant-btn" onClick={addVariant}>
+          <span style={{ fontSize: 28, lineHeight: 1, pointerEvents: "none" }}>+</span>
           Add Variant
         </button>
       </div>
