@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Image from "next/image";
 import Dropdown, { DropdownItem } from "./Dropdown";
 import { getFreeKeys, executeCompletion } from "@/lib/api";
 
@@ -357,7 +358,14 @@ export default function Playground() {
       {/* ── LEFT SIDEBAR ───────────────────────────────────────────────── */}
       <aside className="sidebar">
         <div className="sidebar-header">
-          <div className="sidebar-brand">PROMPTLAB.</div>
+          <div className="relative w-28 h-8 mb-2 flex-shrink-0">
+            <Image 
+              src="/brand/6play_main_logo_transparent.png" 
+              alt="6Play Logo" 
+              fill 
+              className="object-contain dark:invert"
+            />
+          </div>
           <div className="sidebar-meta">made by heo</div>
         </div>
 
